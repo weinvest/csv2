@@ -161,37 +161,44 @@ public:
     class CellIterator {
       friend class Row;
       const char *buffer_;
-      size_t start_;
-      size_t current_;
-      size_t end_;
-
+      size_t row_start_;
+      size_t row_end_;
+      size_t cur_start_;
+      size_t cur_end_;
+      bool escaped_;
     public:
       CellIterator(const char *buffer, size_t start, size_t end)
-          : buffer_(buffer), start_(start), current_(start_), end_(end) {
+          : buffer_(buffer), row_start_(start), cur_start_(row_start_), row_end_(end) {
+        find_cell_end();
       }
 
       CellIterator &operator++() {
-        current_ += 1;
+        cur_start_ = cur_end_;
+        find_cell_end();
         return *this;
       }
 
       Cell operator*() {
-        bool escaped{false};
         class Cell cell;
         cell.buffer_ = buffer_;
-        cell.start_ = current_;
-        cell.end_ = end_;
+        cell.start_ = cur_start_;
+        cell.end_ = cur_end_;
+        cell.escaped_ = escaped_;
+        return cell;       
+      }
+
+      void find_cell_end() {
+        escaped_ = false;
 
         size_t last_quote_location = 0;
         bool quote_opened = false;
-        for (auto i = current_; i < end_; i++) {
-          current_ = i;
+        for (auto i = cur_start_; i < row_end_; i++) {
+          cur_end_ = i;
           if (buffer_[i] == delimiter::value && !quote_opened) {
             // actual delimiter
             // end of cell
-            cell.end_ = current_;
-            cell.escaped_ = escaped;
-            return cell;
+            cur_end_ = cur_end_;
+            return;
           } else {
             if (buffer_[i] == quote_character::value) {
               if (!quote_opened) {
@@ -199,18 +206,18 @@ public:
                 quote_opened = true;
                 last_quote_location = i;
               } else {
-                escaped = (last_quote_location == i - 1);
-                last_quote_location += (i - last_quote_location) * size_t(!escaped);
-                quote_opened = escaped || (buffer_[i + 1] != delimiter::value);
+                escaped_ = (last_quote_location == i - 1);
+                last_quote_location += (i - last_quote_location) * size_t(!escaped_);
+                quote_opened = escaped_ || (buffer_[i + 1] != delimiter::value);
               }
             }
           }
         }
-        cell.end_ = current_ + 1;
-        return cell;
+        
+        cur_end_ += 1;
       }
 
-      bool operator!=(const CellIterator &rhs) { return current_ != rhs.current_; }
+      bool operator!=(const CellIterator &rhs) { return cur_start_ != rhs.cur_start_; }
     };
 
     CellIterator begin() const { return CellIterator(buffer_, start_, end_); }
