@@ -1,9 +1,12 @@
 #pragma once
+#include <cassert>
 #include <cstring>
 #include <csv2/mio.hpp>
 #include <istream>
 #include <string>
 #include <utility>
+#include <vector>
+#include <set>
 
 namespace csv2 {
 
@@ -61,6 +64,12 @@ class Reader {
   size_t header_end_{0};           // end index of header (cache)
 
 public:
+  Reader() {
+    init_header_();
+    row_cnt_ = init_rows_();
+    col_cnt_ = init_cols_();
+  }
+
   // Use this if you'd like to mmap the CSV file
   template <typename StringType> bool mmap(StringType &&filename) {
     mmap_ = mio::mmap_source(filename);
@@ -92,6 +101,7 @@ public:
     friend class CellIterator;
 
   public:
+    auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
     // Returns the raw_value of the cell without handling escaped
     // content, e.g., cell containing """foo""" will be returned
     // as is
@@ -118,16 +128,27 @@ public:
         }
       }
     }
+
+    std::string_view get_preffix(char c) {
+      auto  preffix_end = start_;
+      while(preffix_end < end_ && c != buffer_[preffix_end]) {
+        ++preffix_end;
+      }
+
+      return std::string_view(&buffer_[start_], preffix_end-start_);
+    }
   };
 
   class Row {
     const char *buffer_{nullptr}; // Pointer to memory-mapped buffer
     size_t start_{0};             // Start index of row content
     size_t end_{0};               // End index of row content
+    size_t line_no_{0};
     friend class RowIterator;
     friend class Reader;
 
   public:
+    auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
     // Returns the raw_value of the row
     template <typename Container> void read_raw_value(Container &result) const {
       if (start_ >= end_)
@@ -140,14 +161,13 @@ public:
     class CellIterator {
       friend class Row;
       const char *buffer_;
-      size_t buffer_size_;
       size_t start_;
       size_t current_;
       size_t end_;
 
     public:
-      CellIterator(const char *buffer, size_t buffer_size, size_t start, size_t end)
-          : buffer_(buffer), buffer_size_(buffer_size), start_(start), current_(start_), end_(end) {
+      CellIterator(const char *buffer, size_t start, size_t end)
+          : buffer_(buffer), start_(start), current_(start_), end_(end) {
       }
 
       CellIterator &operator++() {
@@ -193,8 +213,8 @@ public:
       bool operator!=(const CellIterator &rhs) { return current_ != rhs.current_; }
     };
 
-    CellIterator begin() const { return CellIterator(buffer_, end_ - start_, start_, end_); }
-    CellIterator end() const { return CellIterator(buffer_, end_ - start_, end_, end_); }
+    CellIterator begin() const { return CellIterator(buffer_, start_, end_); }
+    CellIterator end() const { return CellIterator(buffer_, end_, end_); }
   };
 
   class RowIterator {
@@ -203,14 +223,53 @@ public:
     size_t buffer_size_;
     size_t start_;
     size_t end_;
+    int64_t line_no_;
 
   public:
-    RowIterator(const char *buffer, size_t buffer_size, size_t start)
-        : buffer_(buffer), buffer_size_(buffer_size), start_(start), end_(start_) {}
+    RowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no)
+        : buffer_(buffer), buffer_size_(buffer_size), start_(start), end_(start_), line_no_(line_no) {
+          end_ = find_next(start_);
+        }
+
+    auto find_next(size_t s) {
+      s = std::min(s, buffer_size_);
+      auto e = s;
+      if (const char *ptr =
+              static_cast<const char *>(memchr(buffer_+s, '\n', (buffer_size_ - s)))) {
+        e = ptr - buffer_;
+      } else {
+        // last row
+        e = buffer_size_;
+      }
+
+      return e;
+    }
+    
+    auto find_prev(size_t e) {
+      auto s = e;
+      if (const char *ptr =
+              static_cast<const char *>(memrchr(buffer_, '\n', (buffer_size_ - e)))) {
+        s = ptr - buffer_ + 1;
+      } else {
+        // last row
+        s = 0;
+      }
+
+      return s;
+    }
 
     RowIterator &operator++() {
       start_ = end_ + 1;
-      end_ = start_;
+      end_ = find_next(start_);
+      
+      line_no_ = start_ > end_ ? line_no_ : (line_no_+1);
+      return *this;
+    }
+
+    RowIterator &operator--() {
+      end_ = start_ - 1;
+      start_ = find_prev(end_);
+      line_no_ = 0 >= line_no_ ? 0 : (line_no_-1);
       return *this;
     }
 
@@ -219,21 +278,27 @@ public:
       result.buffer_ = buffer_;
       result.start_ = start_;
       result.end_ = end_;
+      result.line_no_ = line_no_;
 
-      if (const char *ptr =
-              static_cast<const char *>(memchr(&buffer_[start_], '\n', (buffer_size_ - start_)))) {
-        end_ = start_ + (ptr - &buffer_[start_]);
-        result.end_ = end_;
-        start_ = end_ + 1;
-      } else {
-        // last row
-        end_ = buffer_size_;
-        result.end_ = end_;
-      }
       return result;
     }
 
     bool operator!=(const RowIterator &rhs) { return start_ != rhs.start_; }
+  };
+
+  class RRowIterator : RowIterator {
+  public:
+    using Impl = RowIterator;
+    RRowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no)
+        : Impl(buffer, buffer_size, start, line_no) {}
+    
+    RRowIterator(const Impl& impl): Impl(impl) {}
+
+    RRowIterator& operator++() { Impl::operator--(); return *this; }
+    RRowIterator& operator--() { Impl::operator++(); return *this; }
+
+    bool operator != (const RRowIterator& rhs) { return Impl::operator != (rhs) ; }
+    using Impl::operator*;
   };
 
   RowIterator begin() const {
@@ -241,56 +306,115 @@ public:
       return end();
     if (first_row_is_header::value) {
       const auto header_indices = header_indices_();
-      return RowIterator(buffer_, buffer_size_, header_indices.second  > 0 ? header_indices.second + 1 : 0);
+      return RowIterator(buffer_, buffer_size_, header_indices.second  > 0 ? header_indices.second + 1 : 0, headers_.size());
     } else {
-      return RowIterator(buffer_, buffer_size_, 0);
+      return RowIterator(buffer_, buffer_size_, 0, 0);
     }
   }
 
-  RowIterator end() const { return RowIterator(buffer_, buffer_size_, buffer_size_ + 1); }
+  RowIterator end() const { return RowIterator(buffer_, buffer_size_, buffer_size_ + 1, rows()-1); }
+
+  RRowIterator rbegin() const { return --end(); }
+  RRowIterator rend() const { return --begin(); }
+
+  RowIterator operator[] (int64_t irow) {
+    if(irow < rows()/2) {
+      RowIterator it(buffer_size_, buffer_size_, 0, 0);
+      while(it.line_no_ < irow) {
+        ++it;
+      }
+
+      return it;
+    }
+    else {
+      RowIterator it = end();
+      while(it.line_no_ > irow) {
+        --it;
+      }
+
+      return it;
+    }
+  }
 
 private:
   std::pair<size_t, size_t> header_indices_() const {
-    size_t start = 0, end = 0;
-
-    if (const char *ptr =
-            static_cast<const char *>(memchr(&buffer_[start], '\n', (buffer_size_ - start)))) {
-      end = start + (ptr - &buffer_[start]);
-    }
-    return {start, end};
+    
+    return {0, headers_.empty() ? 0 : headers_.back().end_};
   }
 
 public:
+  auto header() const { return headers_; }
+  auto rows() const { return row_cnt_; }
+  auto cols() const { return col_cnt_; }
 
-  Row header() const {
+private:
+  void init_header_() {
+    if (!first_row_is_header::value) return;
+
+    std::set<std::string_view> header_names;
     size_t start = 0, end = 0;
-    Row result;
-    result.buffer_ = buffer_;
-    result.start_ = start;
-    result.end_ = end;
-
-    if (const char *ptr =
-            static_cast<const char *>(memchr(&buffer_[start], '\n', (buffer_size_ - start)))) {
-      end = start + (ptr - &buffer_[start]);
+    bool continue_next = true;
+    do
+    {
+      Row result;
+      result.buffer_ = buffer_;
+      result.start_ = start;
       result.end_ = end;
-    }
-    return result;
+
+      if (const char *ptr =
+              static_cast<const char *>(memchr(&buffer_[start], '\n', (buffer_size_ - start)))) {
+        end = start + (ptr - &buffer_[start]);
+        result.end_ = end;
+        headers_.push_back(result);
+        
+        auto first_cell = *result.begin();
+        auto preffix = first_cell.get_preffix(':');
+        continue_next = false;
+        if(preffix.empty()) {
+          assert(header_names.empty());
+          headers_.push_back(result);
+        }
+        else if (0 == header_names.count(preffix)) {
+          headers_.push_back(result);
+          header_names.insert(preffix);
+          start = end+1;
+          end = start;
+          continue_next = true;
+        }
+      }
+      else {
+        continue_next = false;
+      }
+      
+    } while (continue_next);
   }
 
-  size_t rows() const {
+  size_t init_rows_() {
     size_t result{0};
     if (!buffer_ || buffer_size_ == 0)
       return result;
-    for (char *p = buffer_; (p = (char *)memchr(p, '\n', (buffer_ + buffer_size_) - p)); ++p)
+    for (const char *p = buffer_; (p = (char *)memchr(p, '\n', (buffer_ + buffer_size_) - p)); ++p)
       ++result;
     return result;
   }
 
-  size_t cols() const {
+  size_t init_cols_() {
     size_t result{0};
-    for (const auto cell : header())
-      result += 1;
+    for(auto& row : headers_) {
+      size_t cols{0};
+      for (const auto cell : header())
+        cols += 1;
+      
+      result = std::max(result, cols);
+    }
+
     return result;
   }
+
+private:
+  std::vector<Row> headers_;
+  static constexpr size_t invalid_size_value = std::numeric_limits<size_t>::max();
+  mutable size_t row_cnt_{invalid_size_value};
+  mutable size_t col_cnt_{invalid_size_value};
 };
 } // namespace csv2
