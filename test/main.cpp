@@ -54,7 +54,7 @@ TEST_CASE("Parse the most basic of CSV buffers ignoring the first row" * test_su
   const std::vector<std::string> expected_header{"a", "b", "c"};
   const auto header = csv.header();
   size_t h = 0;
-  for (const auto cell: header) {
+  for (const auto cell: header[0]) {
     std::string value;
     cell.read_value(value);
     REQUIRE(value == expected_header[h++]);
@@ -85,7 +85,7 @@ TEST_CASE("Parse the most basic of CSV headers" * test_suite("Reader")) {
 
   size_t cells{0};
   const auto header = csv.header();
-  for (const auto cell : header) {
+  for (const auto cell : header[0]) {
     std::string value;
     cell.read_value(value);
     REQUIRE(value == expected_cells[cells++]);

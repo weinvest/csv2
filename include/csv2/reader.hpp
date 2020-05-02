@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 #include <set>
-
+#include <iterator>
 namespace csv2 {
 
 namespace trim_policy {
@@ -105,6 +105,7 @@ public:
 
   public:
     auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
+    auto cell_no() const { return cell_no_; }
     // Returns the raw_value of the cell without handling escaped
     // content, e.g., cell containing """foo""" will be returned
     // as is
@@ -153,6 +154,8 @@ public:
 
   public:
     auto line_no() const { return line_no_; }
+    auto cols() const { return col_cnt_; }
+
     auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
     // Returns the raw_value of the row
     template <typename Container> void read_raw_value(Container &result) const {
@@ -168,12 +171,16 @@ public:
       friend class Reader;
       const char *buffer_;
       size_t row_start_;
-      size_t row_end_;
       size_t cur_start_;
+      size_t row_end_;
       size_t cur_end_;
       int32_t cur_cell_no_;
       bool escaped_;
     public:
+      using value_type = Cell;
+      using reference = Cell&;
+
+
       CellIterator(const char *buffer, size_t start, size_t end, int32_t cell_no)
           : buffer_(buffer), row_start_(start)
           , cur_start_(row_start_), row_end_(end)
@@ -187,6 +194,8 @@ public:
         ++cur_cell_no_;
         return *this;
       }
+      
+      CellIterator operator++(int) { auto ret = *this; ++(*this); return ret; }
 
       Cell operator*() {
         class Cell cell;
@@ -197,7 +206,7 @@ public:
         cell.cell_no_ = cur_cell_no_;
         return cell;       
       }
-
+     
       void find_cell_end() {
         escaped_ = false;
 
@@ -228,11 +237,19 @@ public:
         cur_end_ += (cur_start_ == row_end_) ? 0 : 1;
       }
 
-      bool operator!=(const CellIterator &rhs) { return cur_start_ != rhs.cur_start_ || cur_cell_no_ != rhs.cur_cell_no_; }
-    };
+      bool operator==(const CellIterator &rhs) { return cur_start_ == rhs.cur_start_ && cur_cell_no_ == rhs.cur_cell_no_; }
+      bool operator!=(const CellIterator &rhs) { return !(*this == rhs); }
 
+    };
+    
+    using iterator = CellIterator;
+    using value_type = Cell;
+    using reference = Cell&;
     CellIterator begin() const { return CellIterator(buffer_, start_, end_, 0); }
     CellIterator end() const { return CellIterator(buffer_, end_, end_, col_cnt_); }
+
+    bool operator==(const Row &rhs) { return start_ == rhs.start_ && end_ == rhs.end_; }
+    bool operator!=(const Row &rhs) { return !(*this == rhs); }
   };
 
   class RowIterator {
@@ -245,6 +262,9 @@ public:
     int32_t col_cnt_;
 
   public:
+    using value_type = Row;
+    using reference = Row;
+
     RowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no, int32_t col_cnt)
         : buffer_(buffer), buffer_size_(buffer_size)
         , start_(start), end_(start_), line_no_(line_no), col_cnt_(col_cnt) {
@@ -292,6 +312,9 @@ public:
       line_no_ = 0 >= line_no_ ? 0 : (line_no_-1);
       return *this;
     }
+    
+    RowIterator operator++(int) { auto ret = *this; ++(*this); return ret; }
+    RowIterator operator--(int) { auto ret = *this; --(*this); return ret; }
 
     Row operator*() {
       Row result;
@@ -305,7 +328,11 @@ public:
     }
 
     bool operator!=(const RowIterator &rhs) { return start_ != rhs.start_; }
+    bool operator==(const RowIterator &rhs) { return start_ == rhs.start_; }
   };
+  using value_type = Row;
+  using reference = Row;
+  using iterator = RowIterator;
 
   class RRowIterator : RowIterator {
   public:
@@ -318,7 +345,12 @@ public:
     RRowIterator& operator++() { Impl::operator--(); return *this; }
     RRowIterator& operator--() { Impl::operator++(); return *this; }
 
+    RRowIterator operator++(int) { auto ret = *this; Impl::operator--(); return ret; }
+    RRowIterator operator--(int) { auto ret = *this; Impl::operator++(); return ret; }
+
     bool operator != (const RRowIterator& rhs) { return Impl::operator != (rhs) ; }
+    bool operator == (const RRowIterator& rhs) { return Impl::operator == (rhs) ; }
+
     using Impl::operator*;
   };
 
@@ -364,7 +396,7 @@ private:
   }
 
 public:
-  auto header() const { return headers_; }
+  const auto& header() const { return headers_; }
   auto rows() const { return row_cnt_; }
   auto cols() const { return col_cnt_; }
 
@@ -434,7 +466,75 @@ private:
 private:
   std::vector<Row> headers_;
   static constexpr size_t invalid_size_value = std::numeric_limits<size_t>::max();
-  mutable size_t row_cnt_{invalid_size_value};
-  mutable size_t col_cnt_{invalid_size_value};
+  size_t row_cnt_{invalid_size_value};
+  size_t col_cnt_{invalid_size_value};
 };
+
+using CommaHeaderCSV = csv2::Reader<csv2::delimiter<','>, 
+    csv2::quote_character<'"'>, 
+    csv2::first_row_is_header<true>,
+    csv2::trim_policy::trim_whitespace>;
+using CommaNoneHeaderCSV = csv2::Reader<csv2::delimiter<','>, 
+    csv2::quote_character<'"'>, 
+    csv2::first_row_is_header<false>,
+    csv2::trim_policy::trim_whitespace>;
+
+using TabHeaderCSV = csv2::Reader<csv2::delimiter<'\t'>,
+    csv2::quote_character<'"'>, 
+    csv2::first_row_is_header<true>,
+    csv2::trim_policy::trim_whitespace>;
+using TabNoneHeaderCSV = csv2::Reader<csv2::delimiter<'\t'>,
+    csv2::quote_character<'"'>, 
+    csv2::first_row_is_header<false>,
+    csv2::trim_policy::trim_whitespace>;
 } // namespace csv2
+
+namespace std {
+  template <>
+  struct iterator_traits<csv2::CommaHeaderCSV::RowIterator> {
+      using value_type = csv2::CommaHeaderCSV::Row;
+      using reference = value_type;
+  };
+
+  template <>
+  struct iterator_traits<csv2::CommaHeaderCSV::Row::CellIterator> {
+      using value_type = csv2::CommaHeaderCSV::Cell;
+      using reference = value_type;
+  };
+
+  template <>
+  struct iterator_traits<csv2::CommaNoneHeaderCSV::RowIterator> {
+      using value_type = csv2::CommaNoneHeaderCSV::Row;
+      using reference = value_type;
+  };
+
+  template <>
+  struct iterator_traits<csv2::CommaNoneHeaderCSV::Row::CellIterator> {
+      using value_type = csv2::CommaNoneHeaderCSV::Cell;
+      using reference = value_type;
+  };
+
+ template <>
+  struct iterator_traits<csv2::TabHeaderCSV::RowIterator> {
+      using value_type = csv2::TabHeaderCSV::Row;
+      using reference = value_type;
+  };
+
+  template <>
+  struct iterator_traits<csv2::TabHeaderCSV::Row::CellIterator> {
+      using value_type = csv2::TabHeaderCSV::Cell;
+      using reference = value_type;
+  };
+
+  template <>
+  struct iterator_traits<csv2::TabNoneHeaderCSV::RowIterator> {
+      using value_type = csv2::TabNoneHeaderCSV::Row;
+      using reference = value_type;
+  };
+
+  template <>
+  struct iterator_traits<csv2::TabNoneHeaderCSV::Row::CellIterator> {
+      using value_type = csv2::TabNoneHeaderCSV::Cell;
+      using reference = value_type;
+  };
+}
