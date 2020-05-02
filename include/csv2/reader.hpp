@@ -65,9 +65,7 @@ class Reader {
 
 public:
   Reader() {
-    init_header_();
-    row_cnt_ = init_rows_();
-    col_cnt_ = init_cols_();
+  
   }
 
   // Use this if you'd like to mmap the CSV file
@@ -77,6 +75,10 @@ public:
       return false;
     buffer_ = mmap_.data();
     buffer_size_ = mmap_.mapped_length();
+
+    init_header_();
+    row_cnt_ = init_rows_();
+    col_cnt_ = init_cols_();
     return true;
   }
 
@@ -96,6 +98,7 @@ public:
     const char *buffer_{nullptr}; // Pointer to memory-mapped buffer
     size_t start_{0};             // Start index of cell content
     size_t end_{0};               // End index of cell content
+    int32_t cell_no_{0};
     bool escaped_{false};         // Does the cell have escaped content?
     friend class Row;
     friend class CellIterator;
@@ -144,10 +147,12 @@ public:
     size_t start_{0};             // Start index of row content
     size_t end_{0};               // End index of row content
     size_t line_no_{0};
+    int32_t col_cnt_{0};
     friend class RowIterator;
     friend class Reader;
 
   public:
+    auto line_no() const { return line_no_; }
     auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
     // Returns the raw_value of the row
     template <typename Container> void read_raw_value(Container &result) const {
@@ -160,21 +165,26 @@ public:
 
     class CellIterator {
       friend class Row;
+      friend class Reader;
       const char *buffer_;
       size_t row_start_;
       size_t row_end_;
       size_t cur_start_;
       size_t cur_end_;
+      int32_t cur_cell_no_;
       bool escaped_;
     public:
-      CellIterator(const char *buffer, size_t start, size_t end)
-          : buffer_(buffer), row_start_(start), cur_start_(row_start_), row_end_(end) {
+      CellIterator(const char *buffer, size_t start, size_t end, int32_t cell_no)
+          : buffer_(buffer), row_start_(start)
+          , cur_start_(row_start_), row_end_(end)
+          , cur_cell_no_{cell_no}, escaped_{false} {
         find_cell_end();
       }
 
       CellIterator &operator++() {
-        cur_start_ = cur_end_;
+        cur_start_ = cur_end_ == row_end_ ? row_end_ : cur_end_+1;
         find_cell_end();
+        ++cur_cell_no_;
         return *this;
       }
 
@@ -184,6 +194,7 @@ public:
         cell.start_ = cur_start_;
         cell.end_ = cur_end_;
         cell.escaped_ = escaped_;
+        cell.cell_no_ = cur_cell_no_;
         return cell;       
       }
 
@@ -192,12 +203,12 @@ public:
 
         size_t last_quote_location = 0;
         bool quote_opened = false;
+        cur_end_ = cur_start_;
         for (auto i = cur_start_; i < row_end_; i++) {
           cur_end_ = i;
           if (buffer_[i] == delimiter::value && !quote_opened) {
             // actual delimiter
             // end of cell
-            cur_end_ = cur_end_;
             return;
           } else {
             if (buffer_[i] == quote_character::value) {
@@ -214,14 +225,14 @@ public:
           }
         }
         
-        cur_end_ += 1;
+        cur_end_ += (cur_start_ == row_end_) ? 0 : 1;
       }
 
-      bool operator!=(const CellIterator &rhs) { return cur_start_ != rhs.cur_start_; }
+      bool operator!=(const CellIterator &rhs) { return cur_start_ != rhs.cur_start_ || cur_cell_no_ != rhs.cur_cell_no_; }
     };
 
-    CellIterator begin() const { return CellIterator(buffer_, start_, end_); }
-    CellIterator end() const { return CellIterator(buffer_, end_, end_); }
+    CellIterator begin() const { return CellIterator(buffer_, start_, end_, 0); }
+    CellIterator end() const { return CellIterator(buffer_, end_, end_, col_cnt_); }
   };
 
   class RowIterator {
@@ -231,10 +242,12 @@ public:
     size_t start_;
     size_t end_;
     int64_t line_no_;
+    int32_t col_cnt_;
 
   public:
-    RowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no)
-        : buffer_(buffer), buffer_size_(buffer_size), start_(start), end_(start_), line_no_(line_no) {
+    RowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no, int32_t col_cnt)
+        : buffer_(buffer), buffer_size_(buffer_size)
+        , start_(start), end_(start_), line_no_(line_no), col_cnt_(col_cnt) {
           end_ = find_next(start_);
         }
 
@@ -255,7 +268,7 @@ public:
     auto find_prev(size_t e) {
       auto s = e;
       if (const char *ptr =
-              static_cast<const char *>(memrchr(buffer_, '\n', (buffer_size_ - e)))) {
+              static_cast<const char *>(memrchr(buffer_, '\n', e))) {
         s = ptr - buffer_ + 1;
       } else {
         // last row
@@ -286,7 +299,8 @@ public:
       result.start_ = start_;
       result.end_ = end_;
       result.line_no_ = line_no_;
-
+      result.col_cnt_ = col_cnt_;
+      
       return result;
     }
 
@@ -296,8 +310,8 @@ public:
   class RRowIterator : RowIterator {
   public:
     using Impl = RowIterator;
-    RRowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no)
-        : Impl(buffer, buffer_size, start, line_no) {}
+    RRowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no, int32_t col_cnt)
+        : Impl(buffer, buffer_size, start, line_no, col_cnt) {}
     
     RRowIterator(const Impl& impl): Impl(impl) {}
 
@@ -313,13 +327,13 @@ public:
       return end();
     if (first_row_is_header::value) {
       const auto header_indices = header_indices_();
-      return RowIterator(buffer_, buffer_size_, header_indices.second  > 0 ? header_indices.second + 1 : 0, headers_.size());
+      return RowIterator(buffer_, buffer_size_, header_indices.second  > 0 ? header_indices.second + 1 : 0, headers_.size(), col_cnt_);
     } else {
-      return RowIterator(buffer_, buffer_size_, 0, 0);
+      return RowIterator(buffer_, buffer_size_, 0, 0, col_cnt_);
     }
   }
 
-  RowIterator end() const { return RowIterator(buffer_, buffer_size_, buffer_size_ + 1, rows()-1); }
+  RowIterator end() const { return RowIterator(buffer_, buffer_size_, buffer_size_, rows(), col_cnt_); }
 
   RRowIterator rbegin() const { return --end(); }
   RRowIterator rend() const { return --begin(); }
@@ -372,7 +386,6 @@ private:
               static_cast<const char *>(memchr(&buffer_[start], '\n', (buffer_size_ - start)))) {
         end = start + (ptr - &buffer_[start]);
         result.end_ = end;
-        headers_.push_back(result);
         
         auto first_cell = *result.begin();
         auto preffix = first_cell.get_preffix(':');
@@ -409,9 +422,9 @@ private:
     size_t result{0};
     for(auto& row : headers_) {
       size_t cols{0};
-      for (const auto cell : header())
+      for(auto itCol = row.begin(); itCol.cur_start_ != row.end_; ++itCol) {
         cols += 1;
-      
+      }
       result = std::max(result, cols);
     }
 
