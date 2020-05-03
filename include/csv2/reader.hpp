@@ -64,6 +64,9 @@ class Reader {
   size_t header_end_{0};           // end index of header (cache)
 
 public:
+  using size_type = size_t;
+  using difference_type = int64_t;
+
   Reader() {
   
   }
@@ -79,6 +82,10 @@ public:
     init_header_();
     row_cnt_ = init_rows_();
     col_cnt_ = init_cols_();
+    for(auto& h : headers_)
+    {
+      h.col_cnt_ = col_cnt_;
+    }
     return true;
   }
 
@@ -264,7 +271,7 @@ public:
   public:
     using value_type = Row;
     using reference = Row;
-
+    auto line_no() const { return line_no_; }
     RowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no, int32_t col_cnt)
         : buffer_(buffer), buffer_size_(buffer_size)
         , start_(start), end_(start_), line_no_(line_no), col_cnt_(col_cnt) {
@@ -313,9 +320,27 @@ public:
       return *this;
     }
     
+    RowIterator& operator+= (difference_type n) {
+      while (n > 0) {
+        ++(*this);
+        --n;
+      }
+
+      return *this;
+    }
+    
+    RowIterator& operator-= (difference_type n) {
+      while(n > 0) {
+        --(*this);
+        --n;
+      }
+
+      return *this;
+    }
+    
     RowIterator operator++(int) { auto ret = *this; ++(*this); return ret; }
     RowIterator operator--(int) { auto ret = *this; --(*this); return ret; }
-
+    
     Row operator*() {
       Row result;
       result.buffer_ = buffer_;
@@ -359,7 +384,7 @@ public:
       return end();
     if (first_row_is_header::value) {
       const auto header_indices = header_indices_();
-      return RowIterator(buffer_, buffer_size_, header_indices.second  > 0 ? header_indices.second + 1 : 0, headers_.size(), col_cnt_);
+      return RowIterator(buffer_, buffer_size_, header_indices.second  > 0 ? header_indices.second + 1 : 0, 0, col_cnt_);
     } else {
       return RowIterator(buffer_, buffer_size_, 0, 0, col_cnt_);
     }
@@ -369,26 +394,23 @@ public:
 
   RRowIterator rbegin() const { return --end(); }
   RRowIterator rend() const { return --begin(); }
-
-  RowIterator operator[] (int64_t irow) {
-    if(irow < rows()/2) {
-      RowIterator it(buffer_size_, buffer_size_, 0, 0);
-      while(it.line_no_ < irow) {
-        ++it;
-      }
-
+  
+  RowIterator operator() (size_t irow) {
+    if(irow < size()/2) {
+      RowIterator it = begin();
+      it += irow;
       return it;
     }
     else {
       RowIterator it = end();
-      while(it.line_no_ > irow) {
-        --it;
-      }
+      irow = std::min(irow, size());
+      it -= size()-irow;
 
       return it;
     }
   }
 
+  Row operator[] (size_t irow) { return *(*this(irow)); }
 private:
   std::pair<size_t, size_t> header_indices_() const {
     
@@ -399,7 +421,7 @@ public:
   const auto& header() const { return headers_; }
   auto rows() const { return row_cnt_; }
   auto cols() const { return col_cnt_; }
-
+  auto size() const { return row_cnt_-headers_.size(); }
 private:
   void init_header_() {
     if (!first_row_is_header::value) return;
@@ -490,51 +512,24 @@ using TabNoneHeaderCSV = csv2::Reader<csv2::delimiter<'\t'>,
 } // namespace csv2
 
 namespace std {
-  template <>
-  struct iterator_traits<csv2::CommaHeaderCSV::RowIterator> {
-      using value_type = csv2::CommaHeaderCSV::Row;
-      using reference = value_type;
+#define DEFINE_CSV2_ITERATOR(T)\
+  template <>\
+  struct iterator_traits<csv2::T::RowIterator> {\
+      using value_type = csv2::T::Row;\
+      using reference = value_type;\
+      using iterator_category = random_access_iterator_tag;\
+  };\
+  template <>\
+  struct iterator_traits<csv2::T::Row::CellIterator> {\
+      using value_type = csv2::T::Cell;\
+      using reference = value_type;\
+      using iterator_category = forward_iterator_tag;\
   };
 
-  template <>
-  struct iterator_traits<csv2::CommaHeaderCSV::Row::CellIterator> {
-      using value_type = csv2::CommaHeaderCSV::Cell;
-      using reference = value_type;
-  };
+DEFINE_CSV2_ITERATOR(CommaHeaderCSV)
+DEFINE_CSV2_ITERATOR(CommaNoneHeaderCSV)
+DEFINE_CSV2_ITERATOR(TabHeaderCSV)
+DEFINE_CSV2_ITERATOR(TabNoneHeaderCSV)
 
-  template <>
-  struct iterator_traits<csv2::CommaNoneHeaderCSV::RowIterator> {
-      using value_type = csv2::CommaNoneHeaderCSV::Row;
-      using reference = value_type;
-  };
-
-  template <>
-  struct iterator_traits<csv2::CommaNoneHeaderCSV::Row::CellIterator> {
-      using value_type = csv2::CommaNoneHeaderCSV::Cell;
-      using reference = value_type;
-  };
-
- template <>
-  struct iterator_traits<csv2::TabHeaderCSV::RowIterator> {
-      using value_type = csv2::TabHeaderCSV::Row;
-      using reference = value_type;
-  };
-
-  template <>
-  struct iterator_traits<csv2::TabHeaderCSV::Row::CellIterator> {
-      using value_type = csv2::TabHeaderCSV::Cell;
-      using reference = value_type;
-  };
-
-  template <>
-  struct iterator_traits<csv2::TabNoneHeaderCSV::RowIterator> {
-      using value_type = csv2::TabNoneHeaderCSV::Row;
-      using reference = value_type;
-  };
-
-  template <>
-  struct iterator_traits<csv2::TabNoneHeaderCSV::Row::CellIterator> {
-      using value_type = csv2::TabNoneHeaderCSV::Cell;
-      using reference = value_type;
-  };
+#undef DEFINE_CSV2_ITERATOR
 }
