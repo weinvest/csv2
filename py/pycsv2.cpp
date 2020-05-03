@@ -5,6 +5,7 @@
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <boost/python/slice.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/python/return_arg.hpp>
 #include "csv2/reader.hpp"
 namespace bp=boost::python;
 using namespace csv2;
@@ -55,6 +56,7 @@ void export_reader(const std::string& name
     using CellT = typename CSVT::Cell;
     using RowT = typename CSVT::Row;
     using RowRangeT = RowRange<typename CSVT::RowIterator>;
+    using RowIterT = typename CSVT::RowIterator;
 
     auto cellName = name+"Cell";
     bp::class_<CellT>(cellName.c_str())
@@ -76,12 +78,21 @@ void export_reader(const std::string& name
     auto rowVecName = name+"RowVec";
     bp::class_<RowVec>(rowVecName.c_str())
         .def(bp::vector_indexing_suite<RowVec>());
+    
+    auto rowIterName = name+"Iter";
+    bp::class_<RowIterT>(rowIterName.c_str(), bp::no_init)
+        .def("next", &RowIterT::operator+=, bp::return_self<>())
+        .def("prev", &RowIterT::operator-=, bp::return_self<>())
+        .def("get", &RowIterT::operator*);
 
     bp::class_<CSVT, boost::noncopyable>(name.c_str())
         .def("mmap", mmap_wraper<CSVT>)
         .def("header", &CSVT::header, bp::return_internal_reference<>())
         .def("cols", &CSVT::cols)
         .def("rows", &CSVT::rows)
+        .def("begin", &CSVT::begin)
+        .def("end", &CSVT::end)
+        .def("get_iter", &CSVT::operator())
         .def("__len__", &CSVT::size)
         .def("__iter__", bp::iterator<CSVT>())
         .def("__getitem__", get_item_wraper<CSVT>);
