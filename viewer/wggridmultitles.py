@@ -11,6 +11,8 @@ class GridMulTitles(nps.SimpleGrid):
             self.col_titles = col_titles
         else:
             self.col_titles = []
+
+        self.need_line_no = True
         GridMulTitles.additional_y_offset = len(self.col_titles) + 1
         super(GridMulTitles, self).__init__(screen, *args, **keywords)
     
@@ -34,9 +36,18 @@ class GridMulTitles(nps.SimpleGrid):
             "H" : self.h_move_cell_beg,
             "L" : self.h_move_cell_end,
             "^F": self.h_move_page_down,
-            "^B": self.h_move_page_up            
+            "^B": self.h_move_page_up,
+            "n": self.h_show_line_no,          
         })
-            
+
+    def custom_print_cell(self, cell, value):
+        if -1 == cell.grid_current_value_index:
+            return
+
+        row, col = cell.grid_current_value_index
+        if 0 == col and self.need_line_no:
+            cell.value = f'{row}: {value}'
+
     def update(self, clear=True):
         super(GridMulTitles, self).update(clear = True)
         
@@ -67,4 +78,7 @@ class GridMulTitles(nps.SimpleGrid):
         self.edit_cell[1] = self.columns - 1
         self.begin_col_display_at = self.columns-1
         self.on_select(inpt)
+    
+    def h_show_line_no(self, inpt):
+        self.need_line_no = False if self.need_line_no else True
         
