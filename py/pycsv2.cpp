@@ -7,6 +7,7 @@
 #include <boost/noncopyable.hpp>
 #include <boost/python/return_arg.hpp>
 #include "csv2/reader.hpp"
+#include <stdexcept>
 namespace bp=boost::python;
 using namespace csv2;
 template<typename T>
@@ -34,7 +35,16 @@ auto get_cell_wraper(R* pSelf, int idx)
 {
     static R* LAST_ROW = pSelf;
     static typename R::iterator LAST_IT = pSelf->begin();
-    
+    if(idx >= pSelf->size())
+    {
+        auto errMsg = std::string("cell index out_of_range ");
+        errMsg += std::to_string(idx);
+        errMsg += " not in range [0,";
+        errMsg += std::to_string(pSelf->size());
+        errMsg += ")";
+        throw std::out_of_range(errMsg);
+    }
+
     idx %= pSelf->size();
     if(!(pSelf == LAST_ROW && idx >= LAST_IT.cell_no()))
     {
@@ -79,6 +89,16 @@ auto get_row_wraper(C* self, int idx)
 {
     static C* LAST_CSV = self;
     static typename C::iterator LAST_IT = self->begin();
+    if(idx > 0 && idx >= self->size())
+    {
+        auto errMsg = std::string("row index out_of_range ");
+        errMsg += std::to_string(idx);
+        errMsg += " not in range [0,";
+        errMsg += std::to_string(self->size());
+        errMsg += ")";
+        throw std::out_of_range(errMsg);
+    }
+
     idx %= self->size();
 
     auto step_2_last = idx-LAST_IT.line_no();
