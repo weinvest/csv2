@@ -113,7 +113,15 @@ public:
     friend class CellIterator;
 
   public:
-    auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
+    auto as_string() const {
+      static const std::string NIL("NIL");
+      if(end_ <= start_) {
+        return std::string_view(NIL.data(), NIL.length());
+      }
+
+      return std::string_view(buffer_+start_, end_-start_);
+    }
+
     auto cell_no() const { return cell_no_; }
     // Returns the raw_value of the cell without handling escaped
     // content, e.g., cell containing """foo""" will be returned
@@ -199,7 +207,7 @@ public:
       }
       
       auto cell_no() const { return cur_cell_no_; }
-      
+
       CellIterator &operator++() {
         cur_start_ = cur_end_ == row_end_ ? row_end_ : cur_end_+1;
         find_cell_end();
