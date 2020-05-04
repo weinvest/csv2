@@ -70,7 +70,9 @@ public:
   Reader() {
   
   }
-
+  
+  static auto get_delimiter() { return delimiter::value; }
+  static auto get_quote_ch() { return quote_character::value; }
   // Use this if you'd like to mmap the CSV file
   template <typename StringType> bool mmap(StringType &&filename) {
     mmap_ = mio::mmap_source(filename);
@@ -140,7 +142,7 @@ public:
       }
     }
 
-    std::string_view get_preffix(char c) {
+    std::string_view get_prefix(char c) {
       auto  preffix_end = start_;
       while(preffix_end < end_ && c != buffer_[preffix_end]) {
         ++preffix_end;
@@ -162,6 +164,7 @@ public:
   public:
     auto line_no() const { return line_no_; }
     auto cols() const { return col_cnt_; }
+    auto size() const { return col_cnt_;  }
 
     auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
     // Returns the raw_value of the row
@@ -194,7 +197,9 @@ public:
           , cur_cell_no_{cell_no}, escaped_{false} {
         find_cell_end();
       }
-
+      
+      auto cell_no() const { return cur_cell_no_; }
+      
       CellIterator &operator++() {
         cur_start_ = cur_end_ == row_end_ ? row_end_ : cur_end_+1;
         find_cell_end();
@@ -410,7 +415,7 @@ public:
     }
   }
 
-  Row operator[] (size_t irow) { return *(*this(irow)); }
+  Row operator[] (size_t irow) { return *(*this)(irow); }
 private:
   std::pair<size_t, size_t> header_indices_() const {
     
@@ -442,7 +447,7 @@ private:
         result.end_ = end;
         
         auto first_cell = *result.begin();
-        auto preffix = first_cell.get_preffix(':');
+        auto preffix = first_cell.get_prefix(':');
         continue_next = false;
         if(preffix.empty()) {
           assert(header_names.empty());

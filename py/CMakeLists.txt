@@ -11,3 +11,5 @@ add_library(pycsv2 pycsv2.cpp)
 target_link_libraries(pycsv2 csv2::csv2)
 target_link_libraries(pycsv2 Boost::python)
 target_link_libraries(pycsv2 ${Python3_LIBRARIES})
+
+install(TARGETS pycsv2 RUNTIME DESTINATION lib64)

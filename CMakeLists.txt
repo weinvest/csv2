@@ -54,8 +54,8 @@ if(NOT CSV2_SUBPROJECT)
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
           USE_SOURCE_PERMISSIONS
           PATTERN "*.hpp")
-  install(FILES LICENSE LICENSE.termcolor
-          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/licenses/csv2)
+  #install(FILES LICENSE LICENSE.termcolor
+  #        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/licenses/csv2)
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/.gitignore")
     # Simple glob to regex conversion (.gitignore => CPACK_SOURCE_IGNORE_FILES)
