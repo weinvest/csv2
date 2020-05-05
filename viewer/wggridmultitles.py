@@ -71,18 +71,19 @@ class GridMulTitles(nps.SimpleGrid):
         cell.update()
 
     def h_move_cell_beg(self, inpt):
-        self.edit_cell[1] = 0
-        self.begin_col_display_at = 0
-        
+        self.edit_cell[1] -= self.columns
+        if self.edit_cell[1] < 0:
+            self.edit_cell[1] = 0
+
+        self.begin_col_display_at = (self.edit_cell[1]//self.columns)*self.columns
         self.on_select(inpt)
     
     def h_move_cell_end(self, inpt):
         self.edit_cell[1] += self.columns
         if self.edit_cell[1] >= len(self.values[0]):
             self.edit_cell[1] = 0
-        self.begin_col_display_at += self.columns
 
-        self.begin_col_display_at = self.edit_cell[1]
+        self.begin_col_display_at = (self.edit_cell[1]//self.columns)*self.columns
         self.on_select(inpt)
 
     def h_show_beginning(self, inpt):
