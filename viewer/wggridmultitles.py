@@ -49,20 +49,38 @@ class GridMulTitles(nps.SimpleGrid):
         row, col = cell.grid_current_value_index
         if 0 == col and self.need_line_no:
             cell.value = f'{row}: {value}'
+    
+    def highlight_or_not(self, r, c):
+        if self.edit_cell is None or 2 != len(self.edit_cell):
+            return False
+        
+        if self.edit_cell[1] != c:
+            return False
+
+        if 1 == len(self.col_titles):
+            return True
+        
+        head_prefix = self.col_titles[r][0].split(':')[0]
+        cell_value = str(self.values[self.edit_cell[0]][0])
+        return cell_value.startswith(head_prefix)
 
     def update(self, clear=True):
         super(GridMulTitles, self).update(clear = True)
-        
         for r in range(len(self.col_titles)):
             _title_counter = 0
             for title_cell in self._my_col_titles[r]:
                 try:
-                    title_text = self.col_titles[r][self.begin_col_display_at+_title_counter]
+                    c = _title_counter+self.begin_col_display_at
+                    if self.highlight_or_not(r, c):
+                        title_cell.highlight = True
+                    else:
+                        title_cell.highlight = False
+                    title_text = self.col_titles[r][c]
                     #logging.info(f'{r},{self.begin_col_display_at},{_title_counter}:{title_text}')
                 except IndexError:
                     title_text = None
                 self.update_title_cell(title_cell, title_text)
-                _title_counter += 1
+                _title_counter+=1
             
         self.parent.curses_pad.hline(self.rely+len(self.col_titles), self.relx, curses.ACS_HLINE, self.max_width+3*self.col_margin)
     
