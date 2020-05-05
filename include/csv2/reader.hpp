@@ -267,7 +267,7 @@ public:
     using reference = Cell&;
     CellIterator begin() const { return CellIterator(buffer_, start_, end_, 0); }
     CellIterator end() const { return CellIterator(buffer_, end_, end_, col_cnt_); }
-
+    bool is_in(const CellIterator& it) { return it.cur_start_ >= start_ && it.cur_end_ <= end_; }
     bool operator==(const Row &rhs) { return start_ == rhs.start_ && end_ == rhs.end_; }
     bool operator!=(const Row &rhs) { return !(*this == rhs); }
   };

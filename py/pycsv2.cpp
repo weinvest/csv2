@@ -8,6 +8,7 @@
 #include <boost/python/return_arg.hpp>
 #include "csv2/reader.hpp"
 #include <stdexcept>
+#include <fstream>
 namespace bp=boost::python;
 using namespace csv2;
 template<typename T>
@@ -29,11 +30,10 @@ std::string get_prefix_wraper(C* pSelf, char c)
     auto sv = pSelf->get_prefix(c);
     return std::string(sv.begin(), sv.end()); 
 }
-
+// std::ofstream f("/tmp/pp", std::ios::out|std::ios::binary);
 template<typename R>
 auto get_cell_wraper(R* pSelf, int idx)
 {
-    static R* LAST_ROW = pSelf;
     static typename R::iterator LAST_IT = pSelf->begin();
     if(idx >= pSelf->size())
     {
@@ -46,17 +46,22 @@ auto get_cell_wraper(R* pSelf, int idx)
     }
 
     idx %= pSelf->size();
-    if(!(pSelf == LAST_ROW && idx >= LAST_IT.cell_no()))
+    if(!(idx >= LAST_IT.cell_no() && pSelf->is_in(LAST_IT)))
     {
-        LAST_ROW = pSelf;
+        // f << "change cache 11" << std::endl;
         LAST_IT = pSelf->begin();
     }
+    // else
+    // {
+    //     f << "no change self:" << pSelf->as_string() << std::endl;
+    // }
+    
 
     while(LAST_IT.cell_no() < idx)
     {
         ++LAST_IT;
     }
-
+    // f << "[" << pSelf->line_no() << "," << idx << "]=" << (*LAST_IT).as_string() <<std::endl;
     return *LAST_IT;
 }
 
@@ -126,6 +131,7 @@ auto get_row_wraper(C* self, int64_t idx)
     }
 
     LAST_CSV = self;
+    // f << "row:" << idx << (*LAST_IT).as_string() << std::endl;
     return *LAST_IT;
 }
 

@@ -49,6 +49,7 @@ class GridMulTitles(nps.SimpleGrid):
         row, col = cell.grid_current_value_index
         if 0 == col and self.need_line_no:
             cell.value = f'{row}: {value}'
+        #logging.info(f'[{row},{col}] = {cell.value}')
     
     def highlight_or_not(self, r, c):
         if self.edit_cell is None or 2 != len(self.edit_cell):
