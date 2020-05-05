@@ -155,7 +155,7 @@ public:
       while(preffix_end < end_ && c != buffer_[preffix_end]) {
         ++preffix_end;
       }
-
+      preffix_end = preffix_end==end_ ? start_ : preffix_end;
       return std::string_view(&buffer_[start_], preffix_end-start_);
     }
   };

@@ -30,6 +30,7 @@ if(CSV2_TEST)
   add_subdirectory(test)
 endif()
 add_subdirectory(py)
+add_subdirectory(example)
 
 if(NOT CSV2_SUBPROJECT)
   configure_package_config_file(csv2Config.cmake.in

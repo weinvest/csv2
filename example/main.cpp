@@ -7,7 +7,7 @@ int main() {
     csv2::first_row_is_header<true>,
     csv2::trim_policy::trim_whitespace> csv;
                
-  if (csv.mmap("/tmp/hm.out")) {
+  if (csv.mmap("/tmp/o.csv")) {
     std::cout << "rows:" << csv.rows() << std::endl;
     const auto& header = csv.header();
     for(auto& h : header) {
