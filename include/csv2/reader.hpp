@@ -113,6 +113,8 @@ public:
     friend class CellIterator;
 
   public:
+    auto buffer() const { return buffer_; }
+
     auto as_string() const {
       static const std::string NIL("NIL");
       if(end_ <= start_) {
@@ -173,6 +175,7 @@ public:
     auto line_no() const { return line_no_; }
     auto cols() const { return col_cnt_; }
     auto size() const { return col_cnt_;  }
+    auto buffer() const { return buffer_; }
 
     auto as_string() const { return std::string_view(buffer_+start_, end_-start_); }
     // Returns the raw_value of the row
@@ -207,6 +210,7 @@ public:
       }
       
       auto cell_no() const { return cur_cell_no_; }
+      auto buffer() const { return buffer_; }
 
       CellIterator &operator++() {
         cur_start_ = cur_end_ == row_end_ ? row_end_ : cur_end_+1;
@@ -267,7 +271,7 @@ public:
     using reference = Cell&;
     CellIterator begin() const { return CellIterator(buffer_, start_, end_, 0); }
     CellIterator end() const { return CellIterator(buffer_, end_, end_, col_cnt_); }
-    bool is_in(const CellIterator& it) { return it.cur_start_ >= start_ && it.cur_end_ <= end_; }
+    bool is_in(const CellIterator& it) { return it.buffer_ == buffer_ && it.cur_start_ >= start_ && it.cur_end_ <= end_; }
     bool operator==(const Row &rhs) { return start_ == rhs.start_ && end_ == rhs.end_; }
     bool operator!=(const Row &rhs) { return !(*this == rhs); }
   };
@@ -285,6 +289,7 @@ public:
     using value_type = Row;
     using reference = Row;
     auto line_no() const { return line_no_; }
+    auto buffer() const { return buffer_; }
     RowIterator(const char *buffer, size_t buffer_size, size_t start, int64_t line_no, int32_t col_cnt)
         : buffer_(buffer), buffer_size_(buffer_size)
         , start_(start), end_(start_), line_no_(line_no), col_cnt_(col_cnt) {
@@ -424,6 +429,8 @@ public:
   }
 
   Row operator[] (size_t irow) { return *(*this)(irow); }
+  auto buffer() const { return buffer_; }
+
 private:
   std::pair<size_t, size_t> header_indices_() const {
     
