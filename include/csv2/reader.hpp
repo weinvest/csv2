@@ -403,7 +403,7 @@ public:
     }
   }
 
-  RowIterator end() const { return RowIterator(buffer_, buffer_size_, buffer_size_, rows(), col_cnt_); }
+  RowIterator end() const { return RowIterator(buffer_, buffer_size_, buffer_size_, size(), col_cnt_); }
 
   RRowIterator rbegin() const { return --end(); }
   RRowIterator rend() const { return --begin(); }

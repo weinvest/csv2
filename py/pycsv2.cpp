@@ -85,7 +85,7 @@ RowRange<typename C::iterator> get_slice_wraper(C* pSelf, bp::slice s)
 }
 
 template<typename C>
-auto get_row_wraper(C* self, int idx)
+auto get_row_wraper(C* self, int64_t idx)
 {
     static C* LAST_CSV = self;
     static typename C::iterator LAST_IT = self->begin();
@@ -114,6 +114,11 @@ auto get_row_wraper(C* self, int idx)
         {
             LAST_IT -= -step_2_last;
         }
+
+        // if(LAST_IT.line_no() != idx)
+        // {
+        //     throw std::runtime_error("ee");
+        // }
     }
     else
     {

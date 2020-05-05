@@ -35,6 +35,8 @@ class GridMulTitles(nps.SimpleGrid):
             "$" : self.h_move_cell_end,
             "H" : self.h_move_cell_beg,
             "L" : self.h_move_cell_end,
+            "J" : self.h_move_page_down,
+            "K" : self.h_move_page_up,
             "^F": self.h_move_page_down,
             "^B": self.h_move_page_up,
             "n": self.h_show_line_no,          
@@ -75,10 +77,24 @@ class GridMulTitles(nps.SimpleGrid):
         self.on_select(inpt)
     
     def h_move_cell_end(self, inpt):
-        self.edit_cell[1] = self.columns - 1
-        self.begin_col_display_at = self.columns-1
+        self.edit_cell[1] += self.columns
+        if self.edit_cell[1] >= len(self.values[0]):
+            self.edit_cell[1] = 0
+        self.begin_col_display_at += self.columns
+
+        self.begin_col_display_at = self.edit_cell[1]
         self.on_select(inpt)
-    
+
+    def h_show_beginning(self, inpt):
+        self.begin_row_display_at = 0
+        self.edit_cell = [0, self.edit_cell[1]]
+        self.on_select(inpt)
+
+    def h_show_end(self, inpt):
+        self.edit_cell = [len(self.values) - 1 , self.edit_cell[1]]
+        self.ensure_cursor_on_display_down_right()
+        self.on_select(inpt)
+
     def h_show_line_no(self, inpt):
         self.need_line_no = False if self.need_line_no else True
         
