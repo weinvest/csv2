@@ -107,7 +107,9 @@ class CSViewerApp(nps.NPSAppManaged):
 if __name__ == '__main__':
     app_name = 'CSViewer'
     
-    logging.basicConfig(filename='/tmp/csv_viewer.log', level=logging.INFO)
+    import getpass
+    user_name = getpass.getuser()
+    logging.basicConfig(filename=f'/tmp/{user_name}.csv_viewer.log', level=logging.INFO)
 
     myApp = CSViewerApp(app_name, sys.argv[1])
     myApp.run()
